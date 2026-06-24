@@ -1,0 +1,208 @@
+name: Build RBLX GFX Tool APK
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: "Build type"
+        required: true
+        default: "debug"
+        type: choice
+        options:
+          - debug
+          - release
+          - both
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ══════════════════════════════════════════════════════════════
+  # JOB 1: Build APK
+  # ══════════════════════════════════════════════════════════════
+  build:
+    name: Build APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: "temurin"
+          cache: gradle
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', '**/libs.versions.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Extract version name
+        id: version
+        run: |
+          VERSION=$(grep 'versionName' app/build.gradle.kts | grep -oP '"\K[^"]+')
+          echo "name=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Run unit tests
+        run: ./gradlew test --stacktrace
+
+      - name: Build Debug APK
+        if: |
+          github.event_name != 'workflow_dispatch' ||
+          github.event.inputs.build_type == 'debug' ||
+          github.event.inputs.build_type == 'both'
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Build Release APK
+        if: |
+          startsWith(github.ref, 'refs/tags/v') ||
+          github.event.inputs.build_type == 'release' ||
+          github.event.inputs.build_type == 'both'
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: Sign Release APK
+        if: |
+          (startsWith(github.ref, 'refs/tags/v') ||
+           github.event.inputs.build_type == 'release' ||
+           github.event.inputs.build_type == 'both') &&
+          secrets.KEYSTORE_BASE64 != ''
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEY_ALIAS:       ${{ secrets.KEY_ALIAS }}
+          STORE_PASSWORD:  ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD:    ${{ secrets.KEY_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > keystore.jks
+
+          APK_PATH=$(find app/build/outputs/apk/release -name "*.apk" ! -name "*signed*" | head -1)
+          SIGNED_PATH="${APK_PATH%.apk}-signed.apk"
+          echo "Signing: $APK_PATH"
+
+          BUILD_TOOLS=$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)
+          APKSIGNER="$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner"
+
+          "$APKSIGNER" sign \
+            --ks keystore.jks \
+            --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass "pass:$STORE_PASSWORD" \
+            --key-pass "pass:$KEY_PASSWORD" \
+            --out "$SIGNED_PATH" \
+            "$APK_PATH"
+
+          echo "Signed APK: $SIGNED_PATH"
+          rm -f keystore.jks
+
+      - name: List generated APKs
+        run: find app/build/outputs/apk -name "*.apk" -exec ls -lh {} \;
+
+      - name: Upload Debug APK
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: RBLX-GFX-Tool-debug-${{ steps.version.outputs.name }}-${{ github.sha }}
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Upload Release APK
+        if: |
+          startsWith(github.ref, 'refs/tags/v') ||
+          github.event.inputs.build_type == 'release' ||
+          github.event.inputs.build_type == 'both'
+        uses: actions/upload-artifact@v4
+        with:
+          name: RBLX-GFX-Tool-release-${{ steps.version.outputs.name }}
+          path: app/build/outputs/apk/release/*.apk
+          retention-days: 90
+          if-no-files-found: ignore
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ github.sha }}
+          path: app/build/reports/tests/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # ══════════════════════════════════════════════════════════════
+  # JOB 2: GitHub Release (chỉ khi push tag vX.Y.Z)
+  # ══════════════════════════════════════════════════════════════
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Release APKs
+        uses: actions/download-artifact@v4
+        with:
+          pattern: RBLX-GFX-Tool-release-*
+          path: release-apks/
+          merge-multiple: true
+
+      - name: Download Debug APKs
+        uses: actions/download-artifact@v4
+        with:
+          pattern: RBLX-GFX-Tool-debug-*
+          path: debug-apks/
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name:   ${{ github.ref_name }}
+          name:       "RBLX GFX Tool ${{ github.ref_name }}"
+          draft:      false
+          prerelease: ${{ contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') }}
+          generate_release_notes: true
+          body: |
+            ## RBLX GFX Tool ${{ github.ref_name }}
+
+            ### 📦 Download
+            | File | Mô tả |
+            |------|-------|
+            | `*-release-signed.apk` | **Release signed** — khuyên dùng |
+            | `*-release.apk`        | Release unsigned (nếu chưa setup keystore) |
+            | `*-debug.apk`          | Debug — đầy đủ log |
+
+            ### ⚠️ Lưu ý cài đặt
+            - Bật **Cài từ nguồn không xác định** trước khi cài APK
+            - Mở Roblox ít nhất **1 lần** trước khi dùng app
+            - Cấp quyền **Quản lý tất cả file** khi được yêu cầu
+
+            ### Yêu cầu
+            - Android 10+ (API 29)
+            - (Tùy chọn) Root: Magisk / KernelSU để dùng chế độ ROOT
+          files: |
+            release-apks/*.apk
+            debug-apks/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

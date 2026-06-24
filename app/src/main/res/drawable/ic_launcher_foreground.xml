@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Background circle -->
+    <path
+        android:fillColor="#0E0E10"
+        android:pathData="M0,0 L108,0 L108,108 L0,108 Z" />
+
+    <!-- Rounded rect background card -->
+    <path
+        android:fillColor="#1A1A1F"
+        android:pathData="M16,28 Q16,16 28,16 L80,16 Q92,16 92,28 L92,80 Q92,92 80,92 L28,92 Q16,92 16,80 Z" />
+
+    <!-- "R" letter - red accent -->
+    <path
+        android:fillColor="#FF4154"
+        android:pathData="M36,36 L36,72 L43,72 L43,57 L52,57 L60,72 L68,72 L59,56 Q65,53 65,45 Q65,36 54,36 Z
+                          M43,43 L53,43 Q58,43 58,45.5 Q58,50 53,50 L43,50 Z" />
+
+    <!-- Small "GFX" text dots - decorative -->
+    <path android:fillColor="#FF8C42"
+          android:pathData="M70,64 L76,64 L76,67 L70,67 Z" />
+    <path android:fillColor="#FF8C42"
+          android:pathData="M70,70 L76,70 L76,73 L70,73 Z" />
+    <path android:fillColor="#FF4154"
+          android:pathData="M70,58 L76,58 L76,61 L70,61 Z" />
+</vector>

@@ -1,0 +1,4 @@
+-keep class com.gfxtool.roblox.data.model.** { *; }
+-keepattributes Signature
+-keepattributes *Annotation*
+-dontwarn kotlin.**
