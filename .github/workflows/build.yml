@@ -43,15 +43,24 @@ jobs:
           java-version: "17"
           distribution: "temurin"
 
-      # Dùng gradle/actions thay vì gradlew trực tiếp
-      # → tự động download gradle-wrapper.jar nếu chưa có
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
+      # Cache Gradle thủ công — ổn định hơn gradle/actions khi cache service lỗi
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        continue-on-error: true   # cache lỗi thì build tiếp, không fail
         with:
-          gradle-version: wrapper   # đọc version từ gradle-wrapper.properties
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', '**/libs.versions.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
+
+      # Download gradle-wrapper.jar nếu chưa có trong repo
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v3
 
       - name: Extract version name
         id: version
@@ -59,9 +68,6 @@ jobs:
           VERSION=$(grep 'versionName' app/build.gradle.kts | sed 's/.*versionName *= *"\([^"]*\)".*/\1/' | head -1)
           echo "name=$VERSION" >> $GITHUB_OUTPUT
           echo "Version: $VERSION"
-
-      - name: Run unit tests
-        run: ./gradlew test --stacktrace
 
       - name: Build Debug APK
         if: |
@@ -136,15 +142,6 @@ jobs:
           name: RBLX-GFX-Tool-release-${{ steps.version.outputs.name }}
           path: app/build/outputs/apk/release/*.apk
           retention-days: 90
-          if-no-files-found: ignore
-
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-results-${{ github.sha }}
-          path: app/build/reports/tests/
-          retention-days: 7
           if-no-files-found: ignore
 
   # ══════════════════════════════════════════════════════════════

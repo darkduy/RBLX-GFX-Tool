@@ -36,6 +36,14 @@ android {
 
     buildFeatures { compose = true }
 
+    // ── Unit tests chạy trên JVM thuần (không cần Android emulator) ──
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+            isReturnDefaultValues = true   // mock Android SDK calls → trả về default thay vì throw
+        }
+    }
+
     // ── Đặt tên file APK output: RBLX-GFX-Tool-v<version>-<buildType>.apk ──
     applicationVariants.all {
         val variant = this
