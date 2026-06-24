@@ -60,7 +60,7 @@ jobs:
       - name: Extract version name
         id: version
         run: |
-          VERSION=$(grep 'versionName' app/build.gradle.kts | grep -oP '"\K[^"]+')
+          VERSION=$(grep 'versionName' app/build.gradle.kts | sed 's/.*versionName *= *"\([^"]*\)".*/\1/' | head -1)
           echo "name=$VERSION" >> $GITHUB_OUTPUT
           echo "Version: $VERSION"
 
