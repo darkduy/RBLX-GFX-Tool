@@ -41,9 +41,28 @@ jobs:
           java-version: "17"
           distribution: "temurin"
 
-      # v6: Node 24, tự download gradle-wrapper.jar, tự cache build
+      # Đảm bảo gradle-wrapper.jar tồn tại (phòng trường hợp bị gitignore)
+      - name: Ensure Gradle Wrapper JAR exists
+        run: |
+          JAR="gradle/wrapper/gradle-wrapper.jar"
+          if [ ! -f "$JAR" ]; then
+            echo "gradle-wrapper.jar not found — downloading..."
+            GRADLE_VERSION=$(grep 'distributionUrl' gradle/wrapper/gradle-wrapper.properties \
+              | sed 's/.*gradle-\(.*\)-bin.zip/\1/')
+            curl -fsSL \
+              "https://raw.githubusercontent.com/gradle/gradle/v${GRADLE_VERSION}/gradle/wrapper/gradle-wrapper.jar" \
+              -o "$JAR"
+            echo "Downloaded: $(ls -lh $JAR)"
+          else
+            echo "gradle-wrapper.jar found: $(ls -lh $JAR)"
+          fi
+
+      # v6: Node 24, tự cache build
+      # gradle-version: "wrapper" → tự đọc version từ gradle-wrapper.properties (8.7)
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: "wrapper"   # Gradle 8.7
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
