@@ -32,22 +32,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # v4 → Node 24 compatible
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4    # Node 24
 
-      # v5 → Node 24 compatible
       - name: Set up JDK 17
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v5  # Node 24
         with:
           java-version: "17"
           distribution: "temurin"
 
-      # v6 → Node 24 compatible, tự download gradle-wrapper.jar, tự cache
+      # v6: Node 24, tự download gradle-wrapper.jar, tự cache build
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
-        with:
-          cache-problem-until-invalidation: true   # bỏ qua lỗi cache tạm thời
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
@@ -111,12 +107,13 @@ jobs:
 
       - name: List generated APKs
         if: always()
-        run: find app/build/outputs/apk -name "*.apk" -exec ls -lh {} \; 2>/dev/null || echo "No APKs found"
+        run: |
+          find app/build/outputs/apk -name "*.apk" -exec ls -lh {} \; 2>/dev/null \
+            || echo "No APKs found"
 
-      # v4 → Node 24 compatible
       - name: Upload Debug APK
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4   # Node 24
         with:
           name: RBLX-GFX-Tool-debug-${{ steps.version.outputs.name }}-${{ github.sha }}
           path: app/build/outputs/apk/debug/*.apk
@@ -128,7 +125,7 @@ jobs:
           startsWith(github.ref, 'refs/tags/v') ||
           github.event.inputs.build_type == 'release' ||
           github.event.inputs.build_type == 'both'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4   # Node 24
         with:
           name: RBLX-GFX-Tool-release-${{ steps.version.outputs.name }}
           path: app/build/outputs/apk/release/*.apk
@@ -151,47 +148,58 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Download Release APKs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v4   # Node 24
         with:
           pattern: RBLX-GFX-Tool-release-*
           path: release-apks/
           merge-multiple: true
 
       - name: Download Debug APKs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v4   # Node 24
         with:
           pattern: RBLX-GFX-Tool-debug-*
           path: debug-apks/
           merge-multiple: true
 
+      # Dùng GitHub CLI (gh) thay softprops — built-in trên runner, không dùng Node.js
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name:   ${{ github.ref_name }}
-          name:       "RBLX GFX Tool ${{ github.ref_name }}"
-          draft:      false
-          prerelease: ${{ contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') }}
-          generate_release_notes: true
-          body: |
-            ## RBLX GFX Tool ${{ github.ref_name }}
-
-            ### 📦 Download
-            | File | Mô tả |
-            |------|-------|
-            | `*-release-signed.apk` | **Release signed** — khuyên dùng |
-            | `*-release.apk`        | Release unsigned (nếu chưa setup keystore) |
-            | `*-debug.apk`          | Debug — đầy đủ log |
-
-            ### ⚠️ Lưu ý cài đặt
-            - Bật **Cài từ nguồn không xác định** trước khi cài APK
-            - Mở Roblox ít nhất **1 lần** trước khi dùng app
-            - Cấp quyền **Quản lý tất cả file** khi được yêu cầu
-
-            ### Yêu cầu
-            - Android 10+ (API 29)
-            - (Tùy chọn) Root: Magisk / KernelSU để dùng chế độ ROOT
-          files: |
-            release-apks/*.apk
-            debug-apks/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG:          ${{ github.ref_name }}
+        run: |
+          # Xác định prerelease flag
+          PRERELEASE_FLAG=""
+          if echo "$TAG" | grep -qE '-(beta|alpha)'; then
+            PRERELEASE_FLAG="--prerelease"
+          fi
+
+          # Gom tất cả APK
+          APK_FILES=$(find release-apks debug-apks -name "*.apk" 2>/dev/null | tr '\n' ' ')
+
+          BODY=$(cat << 'NOTES'
+          ## RBLX GFX Tool ${{ github.ref_name }}
+
+          ### 📦 Download
+          | File | Mô tả |
+          |------|-------|
+          | `*-release-signed.apk` | **Release signed** — khuyên dùng |
+          | `*-release.apk`        | Release unsigned (nếu chưa setup keystore) |
+          | `*-debug.apk`          | Debug — đầy đủ log |
+
+          ### ⚠️ Lưu ý cài đặt
+          - Bật **Cài từ nguồn không xác định** trước khi cài APK
+          - Mở Roblox ít nhất **1 lần** trước khi dùng app
+          - Cấp quyền **Quản lý tất cả file** khi được yêu cầu
+
+          ### Yêu cầu
+          - Android 10+ (API 29)
+          - (Tùy chọn) Root: Magisk / KernelSU để dùng chế độ ROOT
+          NOTES
+          )
+
+          gh release create "$TAG" \
+            --title "RBLX GFX Tool $TAG" \
+            --notes "$BODY" \
+            --generate-notes \
+            $PRERELEASE_FLAG \
+            $APK_FILES
