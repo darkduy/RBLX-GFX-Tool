@@ -57,13 +57,6 @@ jobs:
           echo "name=$VERSION" >> $GITHUB_OUTPUT
           echo "Version: $VERSION"
 
-      - name: Build Debug APK
-        if: |
-          github.event_name != 'workflow_dispatch' ||
-          github.event.inputs.build_type == 'debug' ||
-          github.event.inputs.build_type == 'both'
-        run: gradle assembleDebug --stacktrace
-
       - name: Build Release APK
         if: |
           startsWith(github.ref, 'refs/tags/v') ||
