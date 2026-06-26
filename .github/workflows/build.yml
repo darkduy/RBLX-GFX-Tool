@@ -41,6 +41,22 @@ jobs:
           java-version: "17"
           distribution: "temurin"
 
+      # Download gradle-wrapper.jar từ services.gradle.org (URL chính thức)
+      - name: Restore Gradle Wrapper JAR
+        run: |
+          JAR="gradle/wrapper/gradle-wrapper.jar"
+          GRADLE_VERSION=$(grep 'distributionUrl' gradle/wrapper/gradle-wrapper.properties             | sed 's/.*gradle-\(.*\)-bin.zip/\1/')
+          echo "Gradle version: $GRADLE_VERSION"
+
+          # Kiểm tra JAR hiện tại có hợp lệ không
+          if ! unzip -p "$JAR" org/gradle/wrapper/GradleWrapperMain.class                > /dev/null 2>&1; then
+            echo "JAR thiếu hoặc lỗi — download từ services.gradle.org..."
+            curl -fsSL               "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-wrapper.jar"               -o "$JAR"
+            echo "Downloaded: $(ls -lh $JAR)"
+          else
+            echo "JAR hợp lệ: $(ls -lh $JAR)"
+          fi
+
       # v6: Node 24, tự cache build
       # gradle-version: "wrapper" → tự đọc version từ gradle-wrapper.properties (8.7)
       - name: Setup Gradle
