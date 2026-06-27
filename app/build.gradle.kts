@@ -72,6 +72,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines)
     implementation(libs.androidx.datastore)
     implementation(libs.gson)
+    implementation(libs.material)
 
     // Tests
     testImplementation("junit:junit:4.13.2")
