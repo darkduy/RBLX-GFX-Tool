@@ -73,6 +73,7 @@ dependencies {
     implementation(libs.androidx.datastore)
     implementation(libs.gson)
     implementation(libs.material)
+    implementation(libs.androidx.savedstate.ktx)
 
     // Tests
     testImplementation("junit:junit:4.13.2")
