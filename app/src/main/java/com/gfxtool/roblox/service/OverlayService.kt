@@ -26,8 +26,8 @@ import androidx.core.app.NotificationCompat
 import androidx.lifecycle.*
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
+import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.gfxtool.roblox.MainActivity
-import com.gfxtool.roblox.R
 import com.gfxtool.roblox.ui.theme.*
 
 /**
