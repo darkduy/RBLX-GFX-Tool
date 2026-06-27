@@ -75,7 +75,13 @@ jobs:
             exit 0
           fi
 
-          echo "$KEYSTORE_BASE64" | base64 -d > keystore.jks
+          # Decode base64 — dùng tr để loại bỏ newline/space thừa trước khi decode
+          echo "$KEYSTORE_BASE64" | tr -d '\n\r ' | base64 -d > keystore.jks
+          echo "Keystore size: $(ls -lh keystore.jks)"
+
+          # Verify keystore hợp lệ với đúng password trước khi sign
+          keytool -list             -keystore keystore.jks             -storepass "$STORE_PASSWORD"             -storetype PKCS12 2>&1 ||           keytool -list             -keystore keystore.jks             -storepass "$STORE_PASSWORD" 2>&1
+          echo "Keystore verified ✅"
 
           APK_PATH=$(find app/build/outputs/apk/release \
             -name "*.apk" ! -name "*signed*" | head -1)
