@@ -1,6 +1,10 @@
 package com.gfxtool.roblox.ui.screens
 
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.Settings
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -24,13 +28,12 @@ import com.gfxtool.roblox.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen(vm: GfxViewModel) {
+fun MainScreen(vm: GfxViewModel, onNavigateToAbout: () -> Unit) {
     val ui by vm.ui.collectAsState()
     val s  = ui.settings
 
-    var saveDialogOpen    by remember { mutableStateOf(false) }
-    var presetName        by remember { mutableStateOf("") }
-    var showRootInfo      by remember { mutableStateOf(false) }
+    var saveDialogOpen by remember { mutableStateOf(false) }
+    var presetName     by remember { mutableStateOf("") }
 
     val context = androidx.compose.ui.platform.LocalContext.current
     val snackbarHost = remember { SnackbarHostState() }
@@ -85,6 +88,15 @@ fun MainScreen(vm: GfxViewModel) {
                     containerColor = BackgroundDark,
                 ),
                 actions = {
+                    // Hướng dẫn sử dụng
+                    IconButton(onClick = onNavigateToAbout) {
+                        Icon(
+                            Icons.Default.Info,
+                            contentDescription = "Hướng dẫn",
+                            tint = OnSurfaceMuted,
+                        )
+                    }
+
                     // Root indicator
                     Surface(
                         shape = RoundedCornerShape(20.dp),
@@ -215,6 +227,58 @@ fun MainScreen(vm: GfxViewModel) {
                             style = MaterialTheme.typography.bodySmall,
                             color = Color(0xFFFFCC80),
                         )
+                    }
+                }
+            }
+
+            // ── Storage permission warning ────────────────────────────
+            if (!ui.hasStoragePermission) {
+                androidx.compose.foundation.layout.Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
+                        .background(Color(0xFF1A0A2A))
+                        .border(1.dp, AccentPrimary.copy(alpha = 0.6f),
+                            androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(Icons.Default.Warning, null,
+                            tint = AccentPrimary, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Thiếu quyền truy cập file",
+                                style = MaterialTheme.typography.bodySmall
+                                    .copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
+                                color = OnSurface,
+                            )
+                            Text(
+                                "Cần quyền Quản lý tất cả file để ghi config Roblox",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = OnSurfaceMuted,
+                            )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        TextButton(
+                            onClick = {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                    context.startActivity(
+                                        Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                                            data = Uri.parse("package:${context.packageName}")
+                                        }
+                                    )
+                                }
+                            },
+                            colors = ButtonDefaults.textButtonColors(contentColor = AccentPrimary),
+                        ) {
+                            Text("Cấp quyền",
+                                style = MaterialTheme.typography.labelSmall
+                                    .copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold))
+                        }
                     }
                 }
             }

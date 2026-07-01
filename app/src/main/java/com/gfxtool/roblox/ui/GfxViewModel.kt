@@ -1,6 +1,8 @@
 package com.gfxtool.roblox.ui
 
 import android.app.Application
+import android.os.Build
+import android.os.Environment
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.gfxtool.roblox.data.model.*
@@ -19,6 +21,7 @@ data class UiState(
     val isApplying: Boolean          = false,
     val snackMessage: String?        = null,
     val exportedFilePath: String?    = null,
+    val hasStoragePermission: Boolean = true,
 )
 
 class GfxViewModel(app: Application) : AndroidViewModel(app) {
@@ -40,6 +43,7 @@ class GfxViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         checkRoot()
+        checkStoragePermission()
         pollRobloxStatus()
     }
 
@@ -122,6 +126,13 @@ class GfxViewModel(app: Application) : AndroidViewModel(app) {
     // ── Misc ──────────────────────────────────────────────────────
 
     fun clearSnack() = _ui.update { it.copy(snackMessage = null) }
+
+    fun checkStoragePermission() {
+        val has = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
+            Environment.isExternalStorageManager()
+        else true
+        _ui.update { it.copy(hasStoragePermission = has) }
+    }
 
     private fun checkRoot() {
         viewModelScope.launch {

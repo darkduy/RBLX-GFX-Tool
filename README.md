@@ -1,7 +1,6 @@
 # RBLX GFX Tool 🎮
 
-![Build](https://github.com/<YOUR_USERNAME>/RBLXGFXTool/actions/workflows/build.yml/badge.svg)
-![Release](https://img.shields.io/github/v/release/<YOUR_USERNAME>/RBLXGFXTool)
+![Build](https://github.com/darkduy/RBLX-GFX-Tool/actions/workflows/build.yml/badge.svg)
 ![Android](https://img.shields.io/badge/Android-10%2B-green)
 
 Ứng dụng Android chỉnh đồ họa Roblox toàn diện — không cần root (hoặc có root để patch trực tiếp).

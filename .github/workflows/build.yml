@@ -21,9 +21,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # ══════════════════════════════════════════════════════════════
-  # JOB 1: Build APK
-  # ══════════════════════════════════════════════════════════════
   build:
     name: Build APK
     runs-on: ubuntu-latest
@@ -45,7 +42,6 @@ jobs:
         with:
           gradle-version: "8.7"   # download trực tiếp, bypass wrapper JAR
 
-
       - name: Extract version name
         id: version
         run: |
@@ -54,16 +50,16 @@ jobs:
           echo "name=$VERSION" >> $GITHUB_OUTPUT
           echo "Version: $VERSION"
 
+      # Build luôn chạy cho mọi trigger (push tag / PR / dispatch)
+      # → PR check được compile lỗi trước khi merge, tag/dispatch build APK phát hành
       - name: Build Release APK
-        if: |
-          startsWith(github.ref, 'refs/tags/v') ||
-          github.event.inputs.build_type == 'release'
         run: gradle assembleRelease --stacktrace
 
+      # Chỉ ký APK khi phát hành thật (tag hoặc dispatch thủ công) — PR không cần ký
       - name: Sign Release APK
         if: |
           startsWith(github.ref, 'refs/tags/v') ||
-          github.event.inputs.build_type == 'release'
+          github.event_name == 'workflow_dispatch'
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           KEY_ALIAS:       ${{ secrets.KEY_ALIAS }}
@@ -75,13 +71,16 @@ jobs:
             exit 0
           fi
 
-          # Decode base64 — dùng tr để loại bỏ newline/space thừa trước khi decode
+          # Decode base64 — loại bỏ newline/space thừa trước khi decode
           echo "$KEYSTORE_BASE64" | tr -d '\n\r ' | base64 -d > keystore.jks
           echo "Keystore size: $(ls -lh keystore.jks)"
 
           # Verify keystore hợp lệ với đúng password trước khi sign
-          keytool -list             -keystore keystore.jks             -storepass "$STORE_PASSWORD"             -storetype PKCS12 2>&1 ||           keytool -list             -keystore keystore.jks             -storepass "$STORE_PASSWORD" 2>&1
-          echo "Keystore verified ✅"
+          if ! keytool -list -keystore keystore.jks -storepass "$STORE_PASSWORD" > /dev/null 2>&1; then
+            echo "Keystore hoặc password không hợp lệ"
+            exit 1
+          fi
+          echo "Keystore verified"
 
           APK_PATH=$(find app/build/outputs/apk/release \
             -name "*.apk" ! -name "*signed*" | head -1)
@@ -106,10 +105,11 @@ jobs:
           find app/build/outputs/apk -name "*.apk" -exec ls -lh {} \; 2>/dev/null \
             || echo "No APKs found"
 
+      # Chỉ upload artifact khi phát hành thật — PR chỉ cần biết build có pass hay không
       - name: Upload Release APK
         if: |
           startsWith(github.ref, 'refs/tags/v') ||
-          github.event.inputs.build_type == 'release'
+          github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4   # Node 24
         with:
           name: RBLX-GFX-Tool-release-${{ steps.version.outputs.name }}

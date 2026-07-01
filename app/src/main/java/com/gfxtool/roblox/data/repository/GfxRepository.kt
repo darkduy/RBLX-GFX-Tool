@@ -1,6 +1,7 @@
 package com.gfxtool.roblox.data.repository
 
 import android.content.Context
+import android.os.Build
 import android.os.Environment
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
@@ -19,31 +20,22 @@ import java.util.UUID
 private val Context.dataStore: DataStore<Preferences>
     by preferencesDataStore(name = "gfx_settings")
 
-/**
- * Kết quả thao tác áp dụng config.
- */
 sealed class ApplyResult {
-    data class Success(val path: String)    : ApplyResult()
-    data class Error(val message: String)   : ApplyResult()
-    object RootNotAvailable                 : ApplyResult()
+    data class Success(val path: String) : ApplyResult()
+    data class Error(val message: String) : ApplyResult()
+    object RootNotAvailable : ApplyResult()
 }
 
 class GfxRepository(private val context: Context) {
 
     private val gson = Gson()
 
-    // ── DataStore keys ────────────────────────────────────────────
     private object Keys {
-        val SETTINGS_JSON   = stringPreferencesKey("settings_json")
-        val PRESETS_JSON    = stringPreferencesKey("presets_json")
-        val APPLY_MODE      = stringPreferencesKey("apply_mode")
+        val SETTINGS_JSON = stringPreferencesKey("settings_json")
+        val PRESETS_JSON  = stringPreferencesKey("presets_json")
+        val APPLY_MODE    = stringPreferencesKey("apply_mode")
     }
 
-    // ── Roblox paths ──────────────────────────────────────────────
-    /**
-     * Các đường dẫn có thể có của Roblox trên Android.
-     * Roblox thay đổi package name theo phiên bản nên cần thử nhiều path.
-     */
     private val robloxPackages = listOf(
         "com.roblox.client",
         "com.roblox.client2",
@@ -51,25 +43,7 @@ class GfxRepository(private val context: Context) {
 
     private val configFileName = "ClientAppSettings.json"
 
-    private fun getRobloxConfigPaths(): List<File> {
-        val paths = mutableListOf<File>()
-
-        // External storage approach (Android 10, scoped storage)
-        val external = Environment.getExternalStorageDirectory()
-        robloxPackages.forEach { pkg ->
-            paths.add(File(external, "Android/data/$pkg/files/$configFileName"))
-            paths.add(File(external, "Android/data/$pkg/files/LocalStorage/$configFileName"))
-        }
-
-        // Internal data (root required)
-        robloxPackages.forEach { pkg ->
-            paths.add(File("/data/data/$pkg/files/$configFileName"))
-        }
-
-        return paths
-    }
-
-    // ── Settings persistence ──────────────────────────────────────
+    // ── Settings ──────────────────────────────────────────────────
 
     val settingsFlow: Flow<GfxSettings> = context.dataStore.data.map { prefs ->
         val json = prefs[Keys.SETTINGS_JSON]
@@ -80,9 +54,7 @@ class GfxRepository(private val context: Context) {
     }
 
     suspend fun saveSettings(settings: GfxSettings) {
-        context.dataStore.edit { prefs ->
-            prefs[Keys.SETTINGS_JSON] = gson.toJson(settings)
-        }
+        context.dataStore.edit { it[Keys.SETTINGS_JSON] = gson.toJson(settings) }
     }
 
     // ── Presets ───────────────────────────────────────────────────
@@ -97,17 +69,13 @@ class GfxRepository(private val context: Context) {
 
     suspend fun savePreset(name: String, settings: GfxSettings) {
         val current = presetsFlow.first().toMutableList()
-        current.add(UserPreset(id = UUID.randomUUID().toString(), name = name, settings = settings))
-        context.dataStore.edit { prefs ->
-            prefs[Keys.PRESETS_JSON] = gson.toJson(current)
-        }
+        current.add(UserPreset(UUID.randomUUID().toString(), name, settings))
+        context.dataStore.edit { it[Keys.PRESETS_JSON] = gson.toJson(current) }
     }
 
     suspend fun deletePreset(id: String) {
         val current = presetsFlow.first().filter { it.id != id }
-        context.dataStore.edit { prefs ->
-            prefs[Keys.PRESETS_JSON] = gson.toJson(current)
-        }
+        context.dataStore.edit { it[Keys.PRESETS_JSON] = gson.toJson(current) }
     }
 
     // ── Apply Mode ────────────────────────────────────────────────
@@ -124,57 +92,72 @@ class GfxRepository(private val context: Context) {
     // ── Root detection ────────────────────────────────────────────
 
     suspend fun isRootAvailable(): Boolean = RootCommandRunner.isAvailable()
-
-    /** Cảnh báo nếu Roblox đang chạy (config chỉ có hiệu lực khi restart). */
     suspend fun isRobloxRunning(): Boolean = RootCommandRunner.isRobloxRunning()
 
     // ── Apply config ──────────────────────────────────────────────
 
-    /**
-     * Áp dụng cài đặt bằng cách ghi file JSON vào thư mục Roblox.
-     *
-     * Tự động thử FILE_CONFIG trước; nếu không ghi được và root khả dụng
-     * thì chuyển sang ROOT_SHELL.
-     */
     suspend fun applyConfig(
         settings: GfxSettings,
         mode: ApplyMode,
     ): ApplyResult = withContext(Dispatchers.IO) {
         val json = RobloxConfigMapper.toJson(settings)
-
         when (mode) {
             ApplyMode.FILE_CONFIG -> applyViaFile(json)
             ApplyMode.ROOT_SHELL  -> applyViaRoot(json)
         }
     }
 
+    /**
+     * Ghi config file vào thư mục Roblox.
+     *
+     * Android 11+ chặn hoàn toàn truy cập Android/data qua File API thông thường
+     * trừ khi đã cấp quyền MANAGE_EXTERNAL_STORAGE (Quản lý tất cả file).
+     * Nếu chưa cấp quyền, trả lỗi kèm hướng dẫn — người dùng nên chuyển sang
+     * chế độ ROOT nếu thiết bị đã root.
+     */
     private fun applyViaFile(json: String): ApplyResult {
-        val targets = getRobloxConfigPaths()
-            .filter { it.path.contains("Android/data") }   // scoped storage only
+        val errors = mutableListOf<String>()
 
-        var lastError = "Không tìm thấy thư mục cài đặt Roblox"
-        var successPath: String? = null
-
-        for (file in targets) {
-            try {
-                file.parentFile?.mkdirs()
-                if (file.parentFile?.exists() == true) {
-                    file.writeText(json, Charsets.UTF_8)
-                    successPath = file.absolutePath
+        // ── Thử 1: MANAGE_EXTERNAL_STORAGE (Android 11+) hoặc Android 10 direct ──
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R ||
+            Environment.isExternalStorageManager()
+        ) {
+            val external = Environment.getExternalStorageDirectory()
+            for (pkg in robloxPackages) {
+                val candidates = listOf(
+                    File(external, "Android/data/$pkg/files/$configFileName"),
+                    File(external, "Android/data/$pkg/files/LocalStorage/$configFileName"),
+                )
+                for (file in candidates) {
+                    try {
+                        file.parentFile?.mkdirs()
+                        file.writeText(json, Charsets.UTF_8)
+                        return ApplyResult.Success(file.absolutePath)
+                    } catch (e: Exception) {
+                        errors.add("${file.path}: ${e.message}")
+                    }
                 }
-            } catch (e: Exception) {
-                lastError = e.message ?: "Lỗi không xác định"
             }
+        } else {
+            errors.add("Chưa cấp quyền MANAGE_EXTERNAL_STORAGE (Quản lý tất cả file)")
         }
 
-        return if (successPath != null) {
-            ApplyResult.Success(successPath)
-        } else {
-            ApplyResult.Error(
-                "$lastError\n\nHãy mở Roblox ít nhất một lần để tạo thư mục, " +
-                "hoặc cấp quyền MANAGE_EXTERNAL_STORAGE trong Cài đặt."
-            )
-        }
+        // ── Kết quả: thất bại, hướng dẫn rõ ràng ───────────────────
+        val detail = errors.joinToString("\n")
+        return ApplyResult.Error(
+            buildString {
+                append("Không thể ghi file config.\n\n")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+                    !Environment.isExternalStorageManager()
+                ) {
+                    append("Cần cấp quyền:\n")
+                    append("Cài đặt → Ứng dụng → RBLX GFX Tool\n")
+                    append("→ Quyền → Quản lý tất cả file → Bật\n\n")
+                }
+                append("Hoặc chuyển sang chế độ ROOT nếu thiết bị đã root.\n")
+                if (detail.isNotBlank()) append("\nChi tiết: $detail")
+            }
+        )
     }
 
     private suspend fun applyViaRoot(json: String): ApplyResult {
@@ -205,9 +188,6 @@ class GfxRepository(private val context: Context) {
         else ApplyResult.Error("Root error: $lastError")
     }
 
-    /**
-     * Xuất file JSON ra bộ nhớ Downloads để user backup hoặc chia sẻ.
-     */
     suspend fun exportToDownloads(settings: GfxSettings): ApplyResult = withContext(Dispatchers.IO) {
         try {
             val dir  = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)

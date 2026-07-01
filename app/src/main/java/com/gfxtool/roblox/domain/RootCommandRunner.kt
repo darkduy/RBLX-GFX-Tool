@@ -46,12 +46,13 @@ object RootCommandRunner {
 
     /**
      * Ghi nội dung vào file với quyền root, tạo thư mục nếu chưa có.
+     *
+     * Lưu ý: trong bash, backslash KHÔNG escape được dấu nháy đơn bên trong
+     * chuỗi single-quote. Kỹ thuật đúng là đóng quote, chèn nháy đơn đã escape,
+     * rồi mở lại quote: ' → '\''
      */
     suspend fun writeFile(path: String, content: String): Result {
-        // Escape content cho shell
-        val safe = content
-            .replace("\\", "\\\\")
-            .replace("'", "\\'")
+        val safe = content.replace("'", "'\\''")
         val dir = path.substringBeforeLast("/")
         return exec("mkdir -p '$dir' && printf '%s' '$safe' > '$path'")
     }

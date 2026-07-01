@@ -13,10 +13,21 @@
 
     <!-- Foreground service for overlay -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Vibration for haptic feedback -->
     <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!--
+        Package visibility (Android 11+ / API 30+):
+        Bắt buộc khai báo để PackageManager.getPackageInfo() có thể thấy Roblox,
+        nếu không RobloxDetector luôn trả về rỗng dù Roblox đã cài đặt.
+    -->
+    <queries>
+        <package android:name="com.roblox.client" />
+        <package android:name="com.roblox.client2" />
+    </queries>
 
     <application
         android:allowBackup="true"
@@ -42,7 +53,12 @@
         <service
             android:name=".service.OverlayService"
             android:exported="false"
-            android:foregroundServiceType="specialUse" />
+            android:foregroundServiceType="specialUse">
+            <!-- Bắt buộc từ Android 14+ (API 34) khi dùng foregroundServiceType="specialUse" -->
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Floating overlay button for in-game GFX quick-switch" />
+        </service>
 
         <!-- FileProvider: chia sẻ file config JSON đã export -->
         <provider

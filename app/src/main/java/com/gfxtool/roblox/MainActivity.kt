@@ -91,6 +91,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Re-check quyền khi user quay lại từ Settings
+        vm.checkStoragePermission()
+    }
+
     /**
      * Bật / tắt overlay service từ UI (có thể gọi sau khi user cấp quyền).
      */
